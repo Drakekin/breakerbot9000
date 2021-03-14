@@ -100,12 +100,12 @@ class Game:
     def from_string(cls, game_string, user):
         print(game_string)
         maybe_game = re.search(
-            r"\s*<:Bullet_1:\d+>\s+(name of game:\s+)?(?P<name>[^<]+)"
-            r"\s*<:Bullet_2:\d+>\s+(number of players:\s+)?(?P<players>[^<]+)"
-            r"\s*<:Bullet_3:\d+>\s+(total time:\s+)?(?P<length>[^<]+)"
-            r"\s*<:Bullet_4:\d+>\s+(description of game:\s+)?(?P<description>[^<]+)"
-            r"\s*<:Bullet_5:\d+>\s+(playtesting platform:\s+)?(?P<platform>[^<]+)"
-            r"(\s*<:Bullet_6:\d+>\s+(any additional info:\s+)?(?P<info>[^<]+))?",
+            r"\s*<:Bullet_1:\d+>\s+((\*\*)?name of game(\*\*)?:(\*\*)?\s+)?(?P<name>[^<]+)"
+            r"\s*<:Bullet_2:\d+>\s+((\*\*)?number of players(\*\*)?:(\*\*)?\s+)?(?P<players>[^<]+)"
+            r"\s*<:Bullet_3:\d+>\s+((\*\*)?total time(\*\*)?:(\*\*)?\s+)?(?P<length>[^<]+)"
+            r"\s*<:Bullet_4:\d+>\s+((\*\*)?description of game(\*\*)?:(\*\*)?\s+)?(?P<description>[^<]+)"
+            r"\s*<:Bullet_5:\d+>\s+((\*\*)?playtesting platform(\*\*)?:(\*\*)?\s+)?(?P<platform>[^<]+)"
+            r"(\s*<:Bullet_6:\d+>\s+((\*\*)?any additional info(\*\*)?:(\*\*)?\s+)?(?P<info>[^<]+))?",
             game_string, re.I
         )
         if maybe_game is None:
@@ -120,7 +120,7 @@ async def parse_event(event):
     async for message in event.channel.history(after=(event_time-timedelta(days=7)+timedelta(hours=4)).replace(tzinfo=None)):
         try:
             game = Game.from_string(message.content, message.author)
-            if game.name.lower() == "name of game:":
+            if "name of game" in game.name.lower():
                 continue
             game.approved = config.approve in [reaction.emoji for reaction in message.reactions]
             game.on_deck = config.on_deck in [reaction.emoji for reaction in message.reactions]
