@@ -100,12 +100,12 @@ class Game:
     def from_string(cls, game_string, user):
         print(game_string)
         maybe_game = re.search(
-            r"\s*<:Bullet_1:\d+>\s+((\*\*)?name of game(\*\*)?:(\*\*)?\s+)?(?P<name>[^<]+)"
-            r"\s*<:Bullet_2:\d+>\s+((\*\*)?number of players(\*\*)?:(\*\*)?\s+)?(?P<players>[^<]+)"
-            r"\s*<:Bullet_3:\d+>\s+((\*\*)?total time(\*\*)?:(\*\*)?\s+)?(?P<length>[^<]+)"
-            r"\s*<:Bullet_4:\d+>\s+((\*\*)?description of game(\*\*)?:(\*\*)?\s+)?(?P<description>[^<]+)"
-            r"\s*<:Bullet_5:\d+>\s+((\*\*)?playtesting platform(\*\*)?:(\*\*)?\s+)?(?P<platform>[^<]+)"
-            r"(\s*<:Bullet_6:\d+>\s+((\*\*)?any additional info(\*\*)?:(\*\*)?\s+)?(?P<info>[^<]+))?",
+            r"\s*<:Bullet_1:\d+>\s+((\s*\*\*\s*)?name of game(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<name>[^<]+)"
+            r"\s*<:Bullet_2:\d+>\s+((\s*\*\*\s*)?number of players(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<players>[^<]+)"
+            r"\s*<:Bullet_3:\d+>\s+((\s*\*\*\s*)?total time(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<length>[^<]+)"
+            r"\s*<:Bullet_4:\d+>\s+((\s*\*\*\s*)?description of game(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<description>[^<]+)"
+            r"\s*<:Bullet_5:\d+>\s+((\s*\*\*\s*)?playtesting platform(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<platform>[^<]+)"
+            r"(\s*<:Bullet_6:\d+>\s+((\s*\*\*\s*)?any additional info(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<info>[^<]+))?",
             game_string, re.I
         )
         if maybe_game is None:
@@ -120,7 +120,7 @@ async def parse_event(event):
     async for message in event.channel.history(after=(event_time-timedelta(days=7)+timedelta(hours=4)).replace(tzinfo=None)):
         try:
             game = Game.from_string(message.content, message.author)
-            if "name of game" in game.name.lower():
+            if "name of game" in game.name.lower() or game.name.strip() == "":
                 continue
             game.approved = config.approve in [reaction.emoji for reaction in message.reactions]
             game.on_deck = config.on_deck in [reaction.emoji for reaction in message.reactions]
@@ -277,8 +277,8 @@ async def on_message(message):
                 return
 
             await config.response_channel.send(
-                f"There {'is' if len(games) != 1 else 'are'} currently {len(games)} game{'s' if len(games) != 1 else ''} for {event_name}:\n" +
-                ",\n".join([f"{game.name} ({game.platform}) by {game.user.mention} ({'on deck' if game.on_deck else 'approved' if game.approved else 'pending'})" for game in games])
+                f"There {'is' if len(games) == 1 else 'are'} currently {len(games)} game{'s' if len(games) != 1 else ''} for {event_name}\n" +
+                "\n".join([f"{game.name} ({game.platform}) by {game.user.mention} ({'on deck' if game.on_deck else 'approved' if game.approved else 'pending'})" for game in games])
             )
 
         help = re.search("help", message.content)
