@@ -195,7 +195,7 @@ async def next_event(event):
         if not game.approved:
             continue
 
-        await config.voice_template.clone(f"{game.name} ({game.platform})")
+        await config.voice_template.clone(name=f"{game.name} ({game.platform})")
         game_lists.append(f"{game.name} ({game.platform} by {game.user.mention}){' (on deck)' if game.on_deck else ''}")
 
     await config.response_channel.send(response + "\n".join(game_lists))
@@ -205,16 +205,20 @@ async def next_event(event):
 async def main_task():
     print("running")
     while True:
+        print("ping")
         current_time = datetime.now(tz=pytz.utc)
         for event in config.events:
             delta = event.get_next_event_time() - current_time
             if delta <= timedelta(hours=-3, minutes=-55):
+                print(f"ending {event.name}")
                 await ending_event(event)
                 break
             elif delta <= timedelta(seconds=0):
+                print(f"{event.name} ongoing")
                 await current_event(event)
                 break
             elif delta <= timedelta(minutes=5):
+                print(f"starting {event.name}")
                 await next_event(event)
                 break
 
