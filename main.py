@@ -1,56 +1,17 @@
 import asyncio
 import re
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, timedelta
 from os import environ
 
 import discord
 from discord.errors import Forbidden
 import pytz
 
+from data import BotConfig, Event, Game
+
 UPDATE_POST_IMAGE_URL = "https://media.discordapp.net/attachments/698288353493254154/778364076468076544/Plytest_Submissions-09.png?width=800&height=292"
 
 client = discord.Client()
-
-
-class BotConfig:
-    config_channel = None
-    response_channel = None
-    raw_config = []
-    approve = None
-    on_deck = None
-    events = []
-    task = None
-    voice_template = None
-
-
-class Event:
-    def __init__(self, day, name, tz, start, channel, host):
-        self.day = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].index(day.lower())
-        self.name = name
-        self.tz = pytz.timezone(tz)
-        self.start = start
-        self.channel = channel
-        self.host = host
-
-    def get_next_event_time(self, offset=timedelta(seconds=0)):
-        current_time = datetime.now(tz=pytz.utc) + offset
-        weekday = current_time.weekday()
-        if weekday < self.day:
-            day_delta = self.day - weekday + 7
-        else:
-            day_delta = self.day - weekday
-
-        tz_unaware_time = datetime.combine(
-            date.today() + timedelta(days=day_delta),
-            time(int(self.start[0:2]), int(self.start[2:4]))
-        )
-        possible = self.tz.localize(tz_unaware_time).astimezone(pytz.utc)
-
-        if possible - current_time < timedelta(hours=-4):
-            return self.tz.localize(tz_unaware_time + timedelta(days=7)).astimezone(pytz.utc)
-
-        return possible
-
 
 config = BotConfig()
 
@@ -82,35 +43,6 @@ async def on_ready():
         config.task.cancel()
 
     config.task = asyncio.create_task(main_task())
-
-
-class Game:
-    def __init__(self, name, user, players, length, description, platform, info=None):
-        self.user = user
-        self.info = info.strip() if info is not None else None
-        self.platform = platform.strip()
-        self.description = description.strip()
-        self.length = length.strip()
-        self.players = players.strip()
-        self.name = name.strip()
-        self.approved = False
-        self.on_deck = False
-
-    @classmethod
-    def from_string(cls, game_string, user):
-        print(game_string)
-        maybe_game = re.search(
-            r"\s*<:Bullet_1:\d+>\s+((\s*\*\*\s*)?name of game(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<name>[^<]+)"
-            r"\s*<:Bullet_2:\d+>\s+((\s*\*\*\s*)?number of players(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<players>[^<]+)"
-            r"\s*<:Bullet_3:\d+>\s+((\s*\*\*\s*)?total time(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<length>[^<]+)"
-            r"\s*<:Bullet_4:\d+>\s+((\s*\*\*\s*)?description of game(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<description>[^<]+)"
-            r"\s*<:Bullet_5:\d+>\s+((\s*\*\*\s*)?playtesting platform(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<platform>[^<]+)"
-            r"(\s*<:Bullet_6:\d+>\s+((\s*\*\*\s*)?any additional info(\s*\*\*\s*)?:(\s*\*\*\s*)?\s*)?(?P<info>[^<]+))?",
-            game_string, re.I
-        )
-        if maybe_game is None:
-            raise ValueError("not a game")
-        return Game(user=user, **maybe_game.groupdict())
 
 
 async def parse_event(event):
@@ -178,7 +110,10 @@ async def ending_event(event):
             await channel.delete()
             game_channel.remove(channel.name)
 
-    await config.response_channel.send(f"Cleaned up voice channels for {event.name}")
+    if game_channel:
+        await config.response_channel.send(f"Could not clean up all voice channels for {event.name}")
+    else:
+        await config.response_channel.send(f"Cleaned up voice channels for {event.name}")
 
     await event.channel.send(create_update_post(event), embed=discord.Embed().set_image(url=UPDATE_POST_IMAGE_URL))
 
@@ -195,11 +130,12 @@ async def next_event(event):
         if not game.approved:
             continue
 
-        await config.voice_template.clone(name=f"{game.name} ({game.platform})")
+        channel = await config.voice_template.clone(name=f"{game.name} ({game.platform})")
+        await channel.edit(sync_permissions=True)
         game_lists.append(f"{game.name} ({game.platform} by {game.user.mention}){' (on deck)' if game.on_deck else ''}")
 
     await config.response_channel.send(response + "\n".join(game_lists))
-    await event.channel.send(f"{event.name} has started! Please join <#{config.voice_template}>")
+    await event.channel.send(f"{event.name} has started! Please join {config.voice_template.mention}")
 
 
 async def main_task():
@@ -282,8 +218,32 @@ async def on_message(message):
 
             await config.response_channel.send(
                 f"There {'is' if len(games) == 1 else 'are'} currently {len(games)} game{'s' if len(games) != 1 else ''} for {event_name}\n" +
-                "\n".join([f"{game.name} ({game.platform}) by {game.user.mention} ({'on deck' if game.on_deck else 'approved' if game.approved else 'pending'})" for game in games])
+                "\n".join([
+                              f"{game.name} ({game.platform}) by {game.user.mention} ({'on deck' if game.on_deck else 'approved' if game.approved else 'pending'})"
+                              for game in games])
             )
+
+        demo = re.search("create channels for ([^<>]+)", message.content)
+        if demo is not None:
+            event_name = demo.group(1).lower()
+            for event in config.events:
+                if event.name.lower() == event_name:
+                    await next_event(event)
+                    break
+            else:
+                await config.response_channel.send(f"I can't find an event called {event_name}")
+                return
+
+        undemo = re.search("delete channels for ([^<>]+)", message.content)
+        if undemo is not None:
+            event_name = undemo.group(1).lower()
+            for event in config.events:
+                if event.name.lower() == event_name:
+                    await ending_event(event)
+                    break
+            else:
+                await config.response_channel.send(f"I can't find an event called {event_name}")
+                return
 
         help = re.search("help", message.content)
         if help is not None:
